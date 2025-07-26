@@ -1,5 +1,5 @@
 {
-  description = "devshell";
+  description = "aperture devshell";
 
   outputs =
     { nixpkgs, ... }:
@@ -12,12 +12,10 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             stdenv.cc.cc
-            arduino-cli
             platformio
           ];
 
           LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
-          ARDUINO_CONFIG_FILE = "./arduino-cli.yaml";
         };
       });
     };
